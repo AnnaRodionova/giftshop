@@ -12,7 +12,6 @@ class Citizen(models.Model):
         ('female', 'female'),
     )
 
-    id = models.IntegerField(primary_key=True)
     enclosing_import = models.ForeignKey(Import, related_name='citizens', on_delete=models.CASCADE)
     citizen_id = models.PositiveIntegerField()
     town = models.CharField(max_length=256)

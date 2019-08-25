@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import serializers
 
 from api.models import Citizen, Import
@@ -53,29 +54,20 @@ class ImportSerializer(serializers.ModelSerializer):
         citizen_map = {}
         citizens_data = validated_data.pop('citizens')
 
-        try:
-            latest_id = Citizen.objects.latest('id')
-        except Citizen.DoesNotExist:
-            latest_id = 1
+        with transaction.atomic():
+            enclosing_import = super().create(validated_data)
 
-        for citizen_data in citizens_data:
-            relatives.append(citizen_data.pop('relatives'))
-            citizen = Citizen(id=latest_id, **citizen_data)
-            citizens.append(citizen)
-            citizen_map[citizen.citizen_id] = citizen
-            latest_id += 1
+            for citizen_data in citizens_data:
+                relatives.append(citizen_data.pop('relatives'))
+                citizen = Citizen.objects.create(enclosing_import=enclosing_import, **citizen_data)
+                citizens.append(citizen)
+                citizen_map[citizen.citizen_id] = citizen
 
-        for i, citizen in enumerate(citizens):
-            for citizen_id in relatives[i]:
-                if citizen_id not in citizen_map:
-                    raise serializers.ValidationError(
-                        {'message': 'There is no relative with citizen_id = {}'.format(citizen_id)})
-                citizen.relatives.add(citizen_map[citizen_id])
+            for i, citizen in enumerate(citizens):
+                for citizen_id in relatives[i]:
+                    if citizen_id not in citizen_map:
+                        raise serializers.ValidationError(
+                            {'message': 'There is no relative with citizen_id = {}'.format(citizen_id)})
+                    citizen.relatives.add(citizen_map[citizen_id])
 
-        enclosing_import = super().create(validated_data)
-
-        for citizen in citizens:
-            citizen.enclosing_import = enclosing_import
-        Citizen.objects.bulk_create(citizens)
-
-        return enclosing_import
+            return enclosing_import
